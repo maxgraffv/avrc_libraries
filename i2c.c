@@ -16,6 +16,14 @@ void i2cSlaveInit(uint8_t slave_address)
 	TWCR = (1<<TWEA) | (1<<TWEN);
 }
 
+void i2cInit(uint8_t device_slave_address)
+{
+	TWSR = 0x00;//Prescaler to 1
+	TWBR = 72;//Bitrate Set
+	TWAR = (device_slave_address<<1);//SLave Address Set
+	TWCR = (1<<TWEA) | (1<<TWEN);//TWI Address flag enable // TWI Enable
+}
+
 void i2cERROR(uint8_t error_code)
 {
 	
@@ -31,7 +39,7 @@ void i2cStart()
 		i2cERROR(0x08);
 }
 
-void i2cWrite(uint8_t data)
+void i2cByteWrite(uint8_t data)
 {
 	TWDR = data;
 	TWCR = (1<<TWINT) | (1<<TWEN);	
@@ -50,7 +58,10 @@ void i2cStop()
 }
 
 
-uint8_t data_recieved()
+
+
+
+uint8_t i2cSlaveDataRecieved()
 {
 	if ((TWSR & 0xF8) == TW_SR_SLA_ACK)
 	{
@@ -68,4 +79,39 @@ uint8_t data_recieved()
 		// Other cases
 		TWCR |= (1 << TWINT) | (1 << TWEA); // Clear interrupt flag and send acknowledge
 	}
+}
+
+
+
+uint8_t i2cRead(uint8_t addr, uint8_t register_addr)
+{
+	i2cStart();
+	i2cByteWrite(addr<<1);
+	i2cByteWrite(register_addr);
+	i2cStop();
+	if((TWSR & 0xF8) == TW_MT_DATA_ACK)
+	{
+		TWCR |= (1<<TWINT);
+		return TWDR;
+	}
+	else{TWCR |= (1<<TWINT);}
+}
+
+void i2cWrite(uint8_t addr, uint8_t register_addr, uint8_t data2write)
+{
+	i2cStart();
+	i2cByteWrite(addr<<1);
+	i2cByteWrite(register_addr);
+	i2cByteWrite(data2write);
+	i2cStop();
+}
+
+
+uint8_t i2cReadAck()
+{
+	TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWEA);
+	
+	while(!(TWCR & (1<<TWINT)));
+	
+	return TWDR;
 }
