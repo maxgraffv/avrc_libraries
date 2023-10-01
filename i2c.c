@@ -1,27 +1,19 @@
 #include <avr/io.h>
 #include <util/twi.h>
 #include <avr/interrupt.h>
-
+#include "i2c.h"
 
 void i2cMasterInit()
 {
-	TWSR = 0x00;//Prescaler to 1
+	TWSR = 0x00; //Prescaler to 1
 	TWBR = 60; //Set Bitrate
-	TWCR = (1<<TWEN); //TWI Enable
+	TWCR = (1<<TWEN) | (1<<TWIE); //TWI Enable
 }
 
 void i2cSlaveInit(uint8_t slave_address)
 {
 	TWAR = (slave_address<<1); //set slave Address
-	TWCR = (1<<TWEA) | (1<<TWEN);
-}
-
-void i2cInit(uint8_t device_slave_address)
-{
-	TWSR = 0x00;//Prescaler to 1
-	TWBR = 72;//Bitrate Set
-	TWAR = (device_slave_address<<1);//SLave Address Set
-	TWCR = (1<<TWEA) | (1<<TWEN);//TWI Address flag enable // TWI Enable
+	TWCR = (1<<TWEA) | (1<<TWEN) | (1<<TWIE);
 }
 
 void i2cERROR(uint8_t error_code)
@@ -33,85 +25,46 @@ void i2cStart()
 {
 	TWCR = (1<<TWINT) | (1<<TWSTA) | (1<<TWEN);
 	while(!(TWCR & (1<<TWINT)))
-		;
-		
-	if(TWSR != (0x08)) //0x08 - Master Status Register i2c Start
-		i2cERROR(0x08);
+	;
+
 }
 
 void i2cByteWrite(uint8_t data)
 {
 	TWDR = data;
-	TWCR = (1<<TWINT) | (1<<TWEN);	
+	TWCR = (1<<TWINT) | (1<<TWEN);
 	
 	while(!(TWCR & (1<<TWINT)))
-		;
-	
-	if(TWSR != 0x28) //0x28 - Master Status Register Data sent Acknowledge
-		i2cERROR(0x28);
+	;
 }
 
 void i2cStop()
 {
-		TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWSTO);
-		while (TWCR & (1 << TWSTO));
+	TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWSTO);
+	while (TWCR & (1 << TWSTO));
 }
 
-
-
-
-
-uint8_t i2cSlaveDataRecieved()
+uint8_t i2cSlaveDataRecieved() //Put into ISR(TWI_vect)
 {
-	if ((TWSR & 0xF8) == TW_SR_SLA_ACK)
+	if ((TWSR & 0xF8) == MT_START)
 	{
-		// Slave address received with acknowledge
-		TWCR |= (1 << TWINT) | (1 << TWEA); // Clear interrupt flag and send acknowledge
+		TWCR |= (1<<TWINT) | (1<<TWEA);
 	}
-	else if ((TWSR & 0xF8) == TW_SR_DATA_ACK)
+	else if ((TWSR & 0xF8) == 0x80)
 	{
-		// Data received with acknowledge
-		TWCR |= (1 << TWINT) | (1 << TWEA); // Clear interrupt flag and send acknowledge
+		TWCR |= (1<<TWINT) | (1<<TWEA);
 		return TWDR;
 	}
 	else
 	{
-		// Other cases
-		TWCR |= (1 << TWINT) | (1 << TWEA); // Clear interrupt flag and send acknowledge
+		TWCR |= (1<<TWINT) | (1<<TWEA);
 	}
 }
 
-
-
-uint8_t i2cRead(uint8_t addr, uint8_t register_addr)
+uint8_t i2cRead()
 {
-	i2cStart();
-	i2cByteWrite(addr<<1);
-	i2cByteWrite(register_addr);
-	i2cStop();
-	if((TWSR & 0xF8) == TW_MT_DATA_ACK)
-	{
-		TWCR |= (1<<TWINT);
-		return TWDR;
-	}
-	else{TWCR |= (1<<TWINT);}
-}
-
-void i2cWrite(uint8_t addr, uint8_t register_addr, uint8_t data2write)
-{
-	i2cStart();
-	i2cByteWrite(addr<<1);
-	i2cByteWrite(register_addr);
-	i2cByteWrite(data2write);
-	i2cStop();
-}
-
-
-uint8_t i2cReadAck()
-{
-	TWCR = (1<<TWINT) | (1<<TWEN) | (1<<TWEA);
-	
-	while(!(TWCR & (1<<TWINT)));
+	TWCR |= (1<<TWEN) | (1<<TWINT);
+	while (!(TWCR & (1 << TWINT)));
 	
 	return TWDR;
 }
